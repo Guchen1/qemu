@@ -10,6 +10,7 @@
 #include "qemu/timer.h"
 #include "cpu.h"
 #include "internals.h"
+#include "cpu-csr.h"
 
 #define TIMER_PERIOD                10 /* 10 ns period for 100 MHz frequency */
 #define CONSTANT_TIMER_TICK_MASK    0xfffffffffffcUL
