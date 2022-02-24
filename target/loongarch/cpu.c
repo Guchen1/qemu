@@ -17,6 +17,8 @@
 #include "internals.h"
 #include "fpu/softfloat-helpers.h"
 #include "cpu-csr.h"
+#include "sysemu/reset.h"
+#include "hw/loader.h"
 
 const char * const regnames[32] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
@@ -80,6 +82,8 @@ static void loongarch_cpu_set_pc(CPUState *cs, vaddr value)
     env->pc = value;
 }
 
+#include "hw/loongarch/loongarch.h"
+
 void loongarch_cpu_set_irq(void *opaque, int irq, int level)
 {
     LoongArchCPU *cpu = opaque;
@@ -101,6 +105,57 @@ void loongarch_cpu_set_irq(void *opaque, int irq, int level)
     } else {
         cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
     }
+}
+
+static void reset_cb(void *opaque)
+{
+    LoongArchCPU *cpu = opaque;
+
+    cpu_reset(CPU(cpu));
+}
+
+static void create_iocsr_region(CPULoongArchState *env, const char *name,
+                                void *value, int base, int size)
+{
+    MemoryRegion *iocsr_rom = g_new(MemoryRegion, 1);
+    memory_region_init_rom(iocsr_rom, NULL, name, size, &error_fatal);
+    memory_region_add_subregion(&env->iocsr_mem, base, iocsr_rom);
+    rom_add_blob_fixed(name, value, size, base);
+}
+
+static void loongarch_create_iocsr(CPULoongArchState *env)
+{
+    uint64_t feature = 1UL << IOCSRF_MSI | 1UL << IOCSRF_EXTIOI |
+                       1UL << IOCSRF_CSRIPI;
+    uint64_t vendor = 0x6e6f73676e6f6f4c; /* "Loongson" */
+    uint64_t cpu_name = 0x303030354133;   /* "3A5000" */
+    uint64_t misc = 1UL << IOCSRM_EXTIOI_EN;
+    int size = 8;
+
+    memory_region_init_rom(&env->iocsr_mem, NULL, "iocsr_misc",
+                           IOCSR_MEM_SIZE, &error_fatal);
+    create_iocsr_region(env, "feature", &feature, FEATURE_REG, size);
+    create_iocsr_region(env, "vendor", &vendor, VENDOR_REG, size);
+    create_iocsr_region(env, "cpu_name", &cpu_name, CPUNAME_REG, size);
+    create_iocsr_region(env, "misc_func", &misc, MISC_FUNC_REG, size);
+}
+
+static void loongarch_cpu_init(LoongArchCPU *la_cpu)
+{
+    CPULoongArchState *env;
+    env = &la_cpu->env;
+
+    qdev_init_gpio_in(DEVICE(la_cpu), loongarch_cpu_set_irq, N_IRQS);
+    memory_region_init_io(&env->system_iocsr, OBJECT(la_cpu), NULL,
+                      env, "iocsr", UINT64_MAX);
+    address_space_init(&env->address_space_iocsr, &env->system_iocsr, "IOCSR");
+
+    timer_init_ns(&la_cpu->timer, QEMU_CLOCK_VIRTUAL,
+                  &loongarch_constant_timer_cb, la_cpu);
+
+    qemu_register_reset(reset_cb, la_cpu);
+    loongarch_create_iocsr(env);
+    memory_region_add_subregion(&env->system_iocsr, 0, &env->iocsr_mem);
 }
 
 static inline bool cpu_loongarch_hw_interrupts_enabled(CPULoongArchState *env)
@@ -520,6 +575,9 @@ static void loongarch_cpu_initfn(Object *obj)
     LoongArchCPU *cpu = LOONGARCH_CPU(obj);
 
     cpu_set_cpustate_pointers(cpu);
+#ifndef CONFIG_USER_ONLY
+    loongarch_cpu_init(cpu);
+#endif
 }
 
 static ObjectClass *loongarch_cpu_class_by_name(const char *cpu_model)
