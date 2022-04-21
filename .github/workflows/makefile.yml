@@ -14,7 +14,7 @@ jobs:
       run: ./configure
       
     - name: Install dependencies
-      run: make
+      run: sudo apt install -y ninja-build&& make
       
     - name: Run check
       run: make check
