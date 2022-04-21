@@ -22,7 +22,7 @@ jobs:
         name: qemu-loongarch64
         path: ./
     - name: zip artifacts
-      run: zip -r qemu-loongarch64.zip qemu-loongarch64
+      run: zip -r qemu-loongarch64.zip ../qemu-loongarch64
     - name: release
       uses: softprops/action-gh-release@v1
       with:
