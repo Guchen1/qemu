@@ -15,8 +15,8 @@ jobs:
       
     - name: make
       run:  make -j3
-    - name: zip artifacts
-      run: zip -Jcvf qemu-loongarch64.tar.xz ./
+    - name: tar artifacts
+      run: tar -Jcvf qemu-loongarch64.tar.xz ./
     - name: upload artifacts
       uses: actions/upload-artifact@v2
       with:
